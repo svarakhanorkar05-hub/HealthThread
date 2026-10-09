@@ -1,41 +1,72 @@
-import { useState } from "react"
-import PatientProfile from "./PatientProfile"
-import HealthTimeline from "./HealthTimeline"
-import AddHealthRecord from "./AddHealthRecord"
-import "./style.css"
+import { useState } from "react";
+import PatientProfile from "./PatientProfile";
+import HealthTimeline from "./HealthTimeline";
+import AddHealthRecord from "./AddHealthRecord";
+import "./style.css";
+
+const initialHealthEvents = [
+  {
+    id: "demo-2022",
+    year: 2022,
+    type: "Vaccination",
+    description: "COVID-19 vaccination",
+  },
+  {
+    id: "demo-2024",
+    year: 2024,
+    type: "Doctor Visit",
+    description: "General health consultation",
+  },
+  {
+    id: "demo-2025",
+    year: 2025,
+    type: "Blood Test",
+    description: "Routine blood test",
+  },
+  {
+    id: "demo-2026",
+    year: 2026,
+    type: "Medication",
+    description: "Prescription added",
+  },
+];
+
+function loadHealthEvents() {
+  try {
+    const saved = localStorage.getItem("healththread-records");
+    return saved ? JSON.parse(saved) : initialHealthEvents;
+  } catch {
+    return initialHealthEvents;
+  }
+}
 
 function App() {
-  const [healthEvents, setHealthEvents] = useState([
-    {
-      year: 2022,
-      type: "Vaccination",
-      description: "COVID-19 vaccination"
-    },
-    {
-      year: 2024,
-      type: "Doctor Visit",
-      description: "General health consultation"
-    },
-    {
-      year: 2025,
-      type: "Blood Test",
-      description: "Routine blood test"
-    },
-    {
-      year: 2026,
-      type: "Medication",
-      description: "Prescription added"
-    }
-  ])
+  const [healthEvents, setHealthEvents] = useState(loadHealthEvents);
 
   function addHealthRecord(newRecord) {
     const newEvent = {
-      year: new Date(newRecord.date).getFullYear(),
+      id: crypto.randomUUID(),
+      year: new Date(newRecord.date + "T12:00:00").getFullYear(),
+      date: newRecord.date,
       type: newRecord.type,
-      description: `${newRecord.title} - ${newRecord.description}`
-    }
+      title: newRecord.title,
+      description: newRecord.description,
+    };
 
-    setHealthEvents([...healthEvents, newEvent])
+    setHealthEvents((currentEvents) => {
+      const updatedEvents = [...currentEvents, newEvent];
+
+      try {
+        localStorage.setItem(
+          "healththread-records",
+          JSON.stringify(updatedEvents)
+        );
+      } catch (error) {
+        console.error("Could not save health records:", error);
+      }
+
+      return updatedEvents;
+    });
   }
 
   return (
@@ -52,7 +83,7 @@ function App() {
 
       <HealthTimeline events={healthEvents} />
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
