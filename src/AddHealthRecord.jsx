@@ -1,26 +1,37 @@
-import { useState } from "react"
+import { useState } from "react";
 
 function AddHealthRecord({ onAddRecord }) {
-  const [type, setType] = useState("Vaccination")
-  const [date, setDate] = useState("")
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
+  const [type, setType] = useState("Vaccination");
+  const [date, setDate] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  function handleSubmit(event) {
-    event.preventDefault()
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setSaving(true);
 
-    const newRecord = {
-      date,
-      type,
-      title,
-      description
+    try {
+      await onAddRecord({
+        date,
+        type,
+        title,
+        description,
+      });
+
+      setDate("");
+      setTitle("");
+      setDescription("");
+      setSuccess("Health record saved.");
+    } catch (err) {
+      setError(err.message || "Could not save the health record.");
+    } finally {
+      setSaving(false);
     }
-
-    onAddRecord(newRecord)
-
-    setDate("")
-    setTitle("")
-    setDescription("")
   }
 
   return (
@@ -28,9 +39,10 @@ function AddHealthRecord({ onAddRecord }) {
       <h2>Add Health Record</h2>
 
       <form onSubmit={handleSubmit}>
-        <label>Record Type</label>
+        <label htmlFor="record-type">Record Type</label>
 
         <select
+          id="record-type"
           value={type}
           onChange={(event) => setType(event.target.value)}
         >
@@ -42,18 +54,20 @@ function AddHealthRecord({ onAddRecord }) {
           <option>Surgery</option>
         </select>
 
-        <label>Date</label>
+        <label htmlFor="record-date">Date</label>
 
         <input
+          id="record-date"
           type="date"
           value={date}
           onChange={(event) => setDate(event.target.value)}
           required
         />
 
-        <label>Title</label>
+        <label htmlFor="record-title">Title</label>
 
         <input
+          id="record-title"
           type="text"
           placeholder="Example: Blood Test"
           value={title}
@@ -61,21 +75,37 @@ function AddHealthRecord({ onAddRecord }) {
           required
         />
 
-        <label>Description</label>
+        <label htmlFor="record-description">Description</label>
 
         <textarea
+          id="record-description"
           placeholder="Enter details..."
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           required
         />
 
-        <button type="submit" className="add-button">
-          Save Record
+        {error && (
+          <p role="alert" className="record-error">
+            {error}
+          </p>
+        )}
+        {success && (
+          <p role="status" className="record-success">
+            {success}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          className="add-button"
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Save Record"}
         </button>
       </form>
     </div>
-  )
+  );
 }
 
-export default AddHealthRecord
+export default AddHealthRecord;
