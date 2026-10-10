@@ -7,10 +7,12 @@ function AddHealthRecord({ onAddRecord }) {
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    setSuccess("");
     setSaving(true);
 
     try {
@@ -24,6 +26,7 @@ function AddHealthRecord({ onAddRecord }) {
       setDate("");
       setTitle("");
       setDescription("");
+      setSuccess("Health record saved.");
     } catch (err) {
       setError(err.message || "Could not save the health record.");
     } finally {
@@ -85,6 +88,11 @@ function AddHealthRecord({ onAddRecord }) {
         {error && (
           <p role="alert" className="record-error">
             {error}
+          </p>
+        )}
+        {success && (
+          <p role="status" className="record-success">
+            {success}
           </p>
         )}
 

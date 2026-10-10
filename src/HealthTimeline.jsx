@@ -1,7 +1,23 @@
 
 import { useState } from "react";
 
-function HealthTimeline({ events, onUpdateRecord, onDeleteRecord }) {
+function HealthTimeline({
+  events,
+  totalCount,
+  recordTypes,
+  search,
+  onSearchChange,
+  selectedType,
+  onTypeChange,
+  sortOrder,
+  onSortChange,
+  onExport,
+  exportDisabled,
+  exportMessage,
+  onClearFilters,
+  onUpdateRecord,
+  onDeleteRecord,
+}) {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     type: "Vaccination",
@@ -12,6 +28,8 @@ function HealthTimeline({ events, onUpdateRecord, onDeleteRecord }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const hasFilters = Boolean(search.trim() || selectedType !== "all");
 
   function startEditing(record) {
     setEditingId(record.id);
@@ -22,6 +40,7 @@ function HealthTimeline({ events, onUpdateRecord, onDeleteRecord }) {
       description: record.description || "",
     });
     setError("");
+    setFeedback("");
   }
 
   function handleChange(event) {
@@ -39,6 +58,7 @@ function HealthTimeline({ events, onUpdateRecord, onDeleteRecord }) {
     try {
       await onUpdateRecord(editingId, form);
       setEditingId(null);
+      setFeedback("Record updated.");
     } catch (err) {
       setError(err.message || "Could not update this record.");
     } finally {
@@ -55,9 +75,11 @@ function HealthTimeline({ events, onUpdateRecord, onDeleteRecord }) {
 
     setDeletingId(recordId);
     setError("");
+    setFeedback("");
 
     try {
       await onDeleteRecord(recordId);
+      setFeedback("Record deleted.");
     } catch (err) {
       setError(err.message || "Could not delete this record.");
     } finally {
@@ -67,18 +89,84 @@ function HealthTimeline({ events, onUpdateRecord, onDeleteRecord }) {
 
   return (
     <div className="timeline">
-      <h2>Health Timeline</h2>
+      <div className="timeline-heading">
+        <div>
+          <p className="section-kicker">RECORDS</p>
+          <h2>Health Timeline</h2>
+          <p className="timeline-count">
+            {totalCount === 1 ? "1 record" : `${totalCount} records`}
+            {hasFilters ? ` · Showing ${events.length}` : ""}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="export-button"
+          onClick={onExport}
+          disabled={exportDisabled}
+        >
+          Export CSV
+        </button>
+      </div>
+
+      <div className="timeline-tools" role="search">
+        <label className="search-control">
+          <span className="visually-hidden">Search records</span>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search title, description, or type"
+          />
+        </label>
+        <label className="filter-control">
+          <span className="visually-hidden">Filter by record type</span>
+          <select
+            value={selectedType}
+            onChange={(event) => onTypeChange(event.target.value)}
+          >
+            <option value="all">All types</option>
+            {recordTypes.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </label>
+        <label className="sort-control">
+          <span className="visually-hidden">Sort records by date</span>
+          <select
+            value={sortOrder}
+            onChange={(event) => onSortChange(event.target.value)}
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </label>
+      </div>
+
+      {exportMessage && (
+        <p className="export-feedback" role="status">{exportMessage}</p>
+      )}
 
       {error && <p role="alert" className="record-error">{error}</p>}
+      {feedback && <p className="record-feedback" role="status">{feedback}</p>}
 
       {events.length === 0 ? (
-        <p>
-          No health records yet. Add your first record to start
-          building your health timeline.
-        </p>
+        <div className="timeline-empty">
+          <h3>{hasFilters ? "No matching records" : "Your timeline is ready"}</h3>
+          <p>
+            {hasFilters
+              ? "Try another search or clear the selected filters."
+              : "Health records you add will appear here, organized by date."}
+          </p>
+          {hasFilters && (
+            <button type="button" onClick={onClearFilters}>
+              Clear filters
+            </button>
+          )}
+        </div>
       ) : (
-        events.map((record) => (
-          <div className="timeline-item" key={record.id}>
+        <div className="record-list">
+          {events.map((record) => (
+          <article className="timeline-item" key={record.id}>
             {editingId === record.id ? (
               <form onSubmit={handleSave}>
                 <h3>Edit Health Record</h3>
@@ -152,17 +240,18 @@ function HealthTimeline({ events, onUpdateRecord, onDeleteRecord }) {
               </form>
             ) : (
               <>
-                <h3>
-                  {record.year} - {record.type}
-                </h3>
+                <div className="record-meta">
+                  <span className="record-type">{record.type || "Health record"}</span>
+                  <span className="record-date">{record.date || "Date unavailable"}</span>
+                </div>
 
                 {record.title && (
-                  <p><strong>{record.title}</strong></p>
+                  <h3 className="record-title">{record.title}</h3>
                 )}
 
-                <p>{record.description}</p>
-
-                {record.date && <small>{record.date}</small>}
+                {record.description && (
+                  <p className="record-description">{record.description}</p>
+                )}
 
                 <div className="record-actions">
                   <button
@@ -183,8 +272,9 @@ function HealthTimeline({ events, onUpdateRecord, onDeleteRecord }) {
                 </div>
               </>
             )}
-          </div>
-        ))
+          </article>
+          ))}
+        </div>
       )}
     </div>
   );
