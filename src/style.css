@@ -134,3 +134,94 @@ h1 {
   min-height: 100px;
   resize: vertical;
 }
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.record-actions button,
+.timeline-item form button {
+  padding: 9px 14px;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #176bce;
+  font: inherit;
+  cursor: pointer;
+}
+
+.record-actions button:disabled,
+.timeline-item form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.timeline-item form {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-item form input,
+.timeline-item form select,
+.timeline-item form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.record-error {
+  color: #b42318;
+  overflow-wrap: anywhere;
+}
+
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.record-actions button,
+.timeline-item form button {
+  padding: 9px 14px;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #176bce;
+  font: inherit;
+  cursor: pointer;
+}
+
+.record-actions button:disabled,
+.timeline-item form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.timeline-item form {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-item form input,
+.timeline-item form select,
+.timeline-item form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.record-error {
+  color: #b42318;
+  overflow-wrap: anywhere;
+}
