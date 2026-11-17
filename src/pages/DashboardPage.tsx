@@ -11,6 +11,9 @@ import {
   Activity,
   Clock,
   TrendingUp,
+  FolderOpen,
+  Sparkles,
+  Camera,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -18,8 +21,20 @@ import { useToast, ToastContainer } from '@/components/Toast';
 import { SkeletonCard } from '@/components/Skeletons';
 import { EmptyState } from '@/components/EmptyState';
 import { formatDate, relativeTime, daysUntil } from '@/lib/utils';
-import { RECORD_TYPE_LABELS, RECORD_TYPE_ICONS, RECORD_TYPE_COLORS, normalizeHealthRecordType } from '@/lib/constants';
-import type { HealthRecord, Medication, Vaccination, Appointment, MenstrualLog } from '@/types/database';
+import {
+  RECORD_TYPE_LABELS,
+  RECORD_TYPE_ICONS,
+  RECORD_TYPE_COLORS,
+  normalizeHealthRecordType,
+} from '@/lib/constants';
+import type {
+  HealthRecord,
+  Medication,
+  Vaccination,
+  Appointment,
+  MenstrualLog,
+  DocumentRecord,
+} from '@/types/database';
 
 export function DashboardPage() {
   const { user, profile } = useAuth();
@@ -32,20 +47,70 @@ export function DashboardPage() {
   const [allergies, setAllergies] = useState<HealthRecord[]>([]);
   const [conditions, setConditions] = useState<HealthRecord[]>([]);
   const [menstrualLogs, setMenstrualLogs] = useState<MenstrualLog[]>([]);
+  const [documentCount, setDocumentCount] = useState(0);
 
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
-    const [recordsRes, medsRes, vaccRes, apptsRes, allergyRes, condRes, menRes] = await Promise.all([
-      supabase.from('health_records').select('*').eq('user_id', user.id).order('event_date', { ascending: false }).limit(5),
-      supabase.from('medications').select('*').eq('user_id', user.id).eq('active', true).order('start_date', { ascending: false }),
-      supabase.from('vaccinations').select('*').eq('user_id', user.id).order('date_administered', { ascending: false }).limit(5),
-      supabase.from('appointments').select('*').eq('user_id', user.id).eq('status', 'upcoming').order('appointment_date', { ascending: true }).limit(3),
-      supabase.from('health_records').select('*').eq('user_id', user.id).eq('record_type', 'allergy').order('event_date', { ascending: false }),
-      supabase.from('health_records').select('*').eq('user_id', user.id).eq('record_type', 'condition').order('event_date', { ascending: false }),
+    const [
+      recordsRes,
+      medsRes,
+      vaccRes,
+      apptsRes,
+      allergyRes,
+      condRes,
+      docsRes,
+      menRes,
+    ] = await Promise.all([
+      supabase
+        .from('health_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('event_date', { ascending: false })
+        .limit(5),
+      supabase
+        .from('medications')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .order('start_date', { ascending: false }),
+      supabase
+        .from('vaccinations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date_administered', { ascending: false })
+        .limit(5),
+      supabase
+        .from('appointments')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'upcoming')
+        .order('appointment_date', { ascending: true })
+        .limit(3),
+      supabase
+        .from('health_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('record_type', 'allergy')
+        .order('event_date', { ascending: false }),
+      supabase
+        .from('health_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('record_type', 'condition')
+        .order('event_date', { ascending: false }),
+      supabase
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id),
       profile?.menstrual_tracking_enabled
-        ? supabase.from('menstrual_logs').select('*').eq('user_id', user.id).order('period_start', { ascending: false }).limit(3)
+        ? supabase
+            .from('menstrual_logs')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('period_start', { ascending: false })
+            .limit(3)
         : Promise.resolve({ data: [], error: null }),
     ]);
 
@@ -55,16 +120,17 @@ export function DashboardPage() {
     if (apptsRes.data) setUpcomingAppointments(apptsRes.data as Appointment[]);
     if (allergyRes.data) setAllergies(allergyRes.data as HealthRecord[]);
     if (condRes.data) setConditions(condRes.data as HealthRecord[]);
+    if (docsRes.count !== null) setDocumentCount(docsRes.count);
     if (menRes.data) setMenstrualLogs(menRes.data as MenstrualLog[]);
 
     if (
-      recordsRes.error
-      || medsRes.error
-      || vaccRes.error
-      || apptsRes.error
-      || allergyRes.error
-      || condRes.error
-      || menRes.error
+      recordsRes.error ||
+      medsRes.error ||
+      vaccRes.error ||
+      apptsRes.error ||
+      allergyRes.error ||
+      condRes.error ||
+      menRes.error
     ) {
       error('Failed to load some health data. Refresh the page to try again.');
     }
@@ -75,8 +141,11 @@ export function DashboardPage() {
     loadData();
   }, [loadData]);
 
-  const nextVaccination = vaccinations.find((v) => v.next_due_date && daysUntil(v.next_due_date) > 0);
+  const nextVaccination = vaccinations.find(
+    (v) => v.next_due_date && daysUntil(v.next_due_date) > 0
+  );
   const latestPeriod = menstrualLogs[0];
+
   return (
     <div className="space-y-6 animate-fade-in">
       <ToastContainer toasts={toasts} dismiss={dismiss} />
@@ -84,25 +153,24 @@ export function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
             Welcome back, {profile?.full_name?.split(' ')[0] || 'there'}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Here's your health overview for today, {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.
+            Here's your health overview for today,{' '}
+            {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Link to="/records" className="btn-secondary text-sm">
-            <FileText className="w-4 h-4" /> Add Record
+          <Link to="/assistant" className="btn btn-secondary text-sm">
+            <Sparkles className="w-4 h-4 text-teal-600" /> Ask AI Assistant
           </Link>
-          <Link to="/appointments" className="btn-secondary text-sm">
-            <Calendar className="w-4 h-4" /> Add Appointment
+          <Link to="/documents" className="btn btn-secondary text-sm">
+            <Camera className="w-4 h-4 text-teal-600" /> Scan Document
           </Link>
-          {profile?.menstrual_tracking_enabled && (
-            <Link to="/menstrual" className="btn-secondary text-sm">
-              <HeartPulse className="w-4 h-4" /> Log Period
-            </Link>
-          )}
+          <Link to="/records" className="btn-primary text-sm">
+            <Plus className="w-4 h-4" /> Add Record
+          </Link>
         </div>
       </div>
 
@@ -123,11 +191,11 @@ export function DashboardPage() {
           link="/medications"
         />
         <StatCard
-          icon={<Syringe className="w-5 h-5" />}
-          label="Vaccines Recorded"
-          value={loading ? null : String(vaccinations.length)}
+          icon={<FolderOpen className="w-5 h-5" />}
+          label="Stored Documents"
+          value={loading ? null : String(documentCount)}
           color="teal"
-          link="/vaccinations"
+          link="/documents"
         />
         <StatCard
           icon={<Calendar className="w-5 h-5" />}
@@ -136,6 +204,27 @@ export function DashboardPage() {
           color="sage"
           link="/appointments"
         />
+      </div>
+
+      {/* AI Assistant Quick Feature Card */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-teal-800 to-teal-900 text-white shadow-elevated flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-700/60 text-teal-100 text-xs font-semibold">
+            <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+            AI Health Assistant
+          </div>
+          <h3 className="text-base sm:text-lg font-bold">Have questions about your health records?</h3>
+          <p className="text-xs sm:text-sm text-teal-100 max-w-xl">
+            Ask your personal assistant to summarize your medical history, explain lab values, or check medication schedules.
+          </p>
+        </div>
+        <Link
+          to="/assistant"
+          className="btn bg-white text-teal-800 hover:bg-cream-100 font-semibold px-4 py-2.5 rounded-xl shrink-0 text-sm shadow-sm inline-flex items-center gap-2"
+        >
+          <Sparkles className="w-4 h-4 text-teal-700" />
+          Chat with Assistant
+        </Link>
       </div>
 
       {loading ? (
@@ -174,8 +263,13 @@ export function DashboardPage() {
                   const recordType = normalizeHealthRecordType(record.record_type);
                   const Icon = RECORD_TYPE_ICONS[recordType];
                   return (
-                    <div key={record.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-cream-50 transition-colors">
-                      <div className={`flex items-center justify-center w-9 h-9 rounded-lg border shrink-0 ${RECORD_TYPE_COLORS[recordType]}`}>
+                    <div
+                      key={record.id}
+                      className="flex items-start gap-3 p-3 rounded-xl hover:bg-cream-50 transition-colors"
+                    >
+                      <div
+                        className={`flex items-center justify-center w-9 h-9 rounded-lg border shrink-0 ${RECORD_TYPE_COLORS[recordType]}`}
+                      >
                         <Icon className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -185,8 +279,12 @@ export function DashboardPage() {
                             {RECORD_TYPE_LABELS[recordType]}
                           </span>
                         </div>
-                        {record.provider && <p className="text-xs text-slate-500 mt-0.5">{record.provider}</p>}
-                        <p className="text-xs text-slate-400 mt-0.5">{formatDate(record.event_date)} · {relativeTime(record.event_date)}</p>
+                        {record.provider && (
+                          <p className="text-xs text-slate-500 mt-0.5">{record.provider}</p>
+                        )}
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {formatDate(record.event_date)} · {relativeTime(record.event_date)}
+                        </p>
                       </div>
                     </div>
                   );
@@ -203,7 +301,9 @@ export function DashboardPage() {
                 <h2 className="section-title flex items-center gap-2 text-base">
                   <Calendar className="w-4 h-4 text-teal-700" /> Upcoming
                 </h2>
-                <Link to="/appointments" className="text-xs text-teal-700 font-medium hover:text-teal-800">View</Link>
+                <Link to="/appointments" className="text-xs text-teal-700 font-medium hover:text-teal-800">
+                  View
+                </Link>
               </div>
               {upcomingAppointments.length === 0 ? (
                 <p className="text-sm text-slate-400 py-4 text-center">No upcoming appointments.</p>
@@ -216,7 +316,9 @@ export function DashboardPage() {
                         <p className="text-sm font-medium text-slate-900 break-words">{apt.title}</p>
                         {apt.provider && <p className="text-xs text-slate-500 mt-0.5">{apt.provider}</p>}
                         <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-xs text-teal-700 font-medium break-words">{formatDate(apt.appointment_date)}</span>
+                          <span className="text-xs text-teal-700 font-medium break-words">
+                            {formatDate(apt.appointment_date)}
+                          </span>
                           {days === 0 ? (
                             <span className="badge bg-rose-50 text-rose-700">Today</span>
                           ) : days <= 7 ? (
@@ -267,7 +369,9 @@ export function DashboardPage() {
               <h2 className="section-title flex items-center gap-2 text-base">
                 <Pill className="w-4 h-4 text-sage-600" /> Active Medications
               </h2>
-              <Link to="/medications" className="text-xs text-teal-700 font-medium hover:text-teal-800">View</Link>
+              <Link to="/medications" className="text-xs text-teal-700 font-medium hover:text-teal-800">
+                View
+              </Link>
             </div>
             {activeMedications.length === 0 ? (
               <p className="text-sm text-slate-400 py-3 text-center">No active medications.</p>
@@ -277,7 +381,10 @@ export function DashboardPage() {
                   <div key={med.id} className="flex items-center gap-2 text-sm">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900 truncate">{med.name}</p>
-                      <p className="text-xs text-slate-500">{med.dosage}{med.frequency ? ` · ${med.frequency}` : ''}</p>
+                      <p className="text-xs text-slate-500">
+                        {med.dosage}
+                        {med.frequency ? ` · ${med.frequency}` : ''}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -291,7 +398,9 @@ export function DashboardPage() {
               <h2 className="section-title flex items-center gap-2 text-base">
                 <Syringe className="w-4 h-4 text-teal-700" /> Vaccinations
               </h2>
-              <Link to="/vaccinations" className="text-xs text-teal-700 font-medium hover:text-teal-800">View</Link>
+              <Link to="/vaccinations" className="text-xs text-teal-700 font-medium hover:text-teal-800">
+                View
+              </Link>
             </div>
             {vaccinations.length === 0 ? (
               <p className="text-sm text-slate-400 py-3 text-center">No vaccinations recorded.</p>
@@ -321,14 +430,18 @@ export function DashboardPage() {
                 <h2 className="section-title flex items-center gap-2 text-base">
                   <HeartPulse className="w-4 h-4 text-rose-500" /> Cycle Summary
                 </h2>
-                <Link to="/menstrual" className="text-xs text-teal-700 font-medium hover:text-teal-800">View</Link>
+                <Link to="/menstrual" className="text-xs text-teal-700 font-medium hover:text-teal-800">
+                  View
+                </Link>
               </div>
               {menstrualLogs.length === 0 ? (
                 <p className="text-sm text-slate-400 py-3 text-center">No period logs yet.</p>
               ) : (
                 <div className="space-y-2">
                   <div className="text-sm">
-                    <p className="font-medium text-slate-900">Last period: {formatDate(latestPeriod?.period_start)}</p>
+                    <p className="font-medium text-slate-900">
+                      Last period: {formatDate(latestPeriod?.period_start)}
+                    </p>
                     {latestPeriod?.flow_level && (
                       <p className="text-xs text-slate-500 capitalize">Flow: {latestPeriod.flow_level}</p>
                     )}

@@ -9,6 +9,8 @@ import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { HealthRecordsPage } from '@/pages/HealthRecordsPage';
+import { DocumentsPage } from '@/pages/DocumentsPage';
+import { AIAssistantPage } from '@/pages/AIAssistantPage';
 import { MedicationsPage } from '@/pages/MedicationsPage';
 import { VaccinationsPage } from '@/pages/VaccinationsPage';
 import { AppointmentsPage } from '@/pages/AppointmentsPage';
@@ -47,7 +49,9 @@ function AppRoutes() {
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/assistant" element={<AIAssistantPage />} />
         <Route path="/records" element={<HealthRecordsPage />} />
+        <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/medications" element={<MedicationsPage />} />
         <Route path="/vaccinations" element={<VaccinationsPage />} />
         <Route path="/appointments" element={<AppointmentsPage />} />

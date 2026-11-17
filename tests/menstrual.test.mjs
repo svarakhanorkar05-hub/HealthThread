@@ -9,6 +9,11 @@ import {
   localDateToDateOnly,
   validatePeriodDates,
 } from '../src/lib/menstrual.ts';
+import {
+  calculateAge,
+  formatDate,
+  toDateInputValue,
+} from '../src/lib/utils.ts';
 
 function period(start, end = null, id) {
   return { id, period_start: start, period_end: end };
@@ -136,4 +141,11 @@ test('age-appropriate education avoids adult cycle ranges for minors', () => {
   const adultEducation = getCycleEducation(30);
   assert.match(adultEducation.summary, /21–35/);
   assert.match(getCycleEducation(null).heading, /vary/i);
+});
+
+test('date-only utility helpers preserve the selected calendar date', () => {
+  assert.equal(toDateInputValue('2024-02-29'), '2024-02-29');
+  assert.equal(formatDate('2024-02-29'), 'Feb 29, 2024');
+  assert.equal(calculateAge('2010-10-15', new Date(2026, 9, 14)), 15);
+  assert.equal(calculateAge('2010-10-14', new Date(2026, 9, 14)), 16);
 });

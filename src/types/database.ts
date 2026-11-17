@@ -10,6 +10,16 @@ export type HealthRecordType =
   | 'allergy'
   | 'custom';
 
+export type DocumentCategory =
+  | 'Medical Reports'
+  | 'Prescriptions'
+  | 'Laboratory Reports'
+  | 'Vaccination Records'
+  | 'Discharge Summaries'
+  | 'Doctor Consultation Records'
+  | 'Scanned Documents'
+  | 'Other';
+
 export interface Profile {
   id: string;
   full_name: string | null;
@@ -51,6 +61,9 @@ export interface Medication {
   prescriber: string | null;
   notes: string | null;
   active: boolean;
+  reminder_times?: string[];
+  reminders_enabled?: boolean;
+  timezone?: string;
   created_at: string;
   updated_at: string;
 }
@@ -87,11 +100,17 @@ export interface DocumentRecord {
   id: string;
   user_id: string;
   title: string;
-  document_type: 'lab_result' | 'prescription' | 'imaging' | 'report' | 'other';
+  document_type?: 'lab_result' | 'prescription' | 'imaging' | 'report' | 'other';
+  category: DocumentCategory;
   file_path: string;
   file_size: number | null;
   mime_type: string | null;
+  original_filename?: string | null;
+  document_date?: string | null;
+  health_record_id?: string | null;
+  extracted_text?: string | null;
   uploaded_at: string;
+  updated_at?: string;
 }
 
 export interface Reminder {
@@ -102,6 +121,42 @@ export interface Reminder {
   due_date: string;
   completed: boolean;
   notes: string | null;
+  created_at: string;
+}
+
+export interface PushSubscriptionRecord {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  user_agent?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DoseStatus = 'pending' | 'taken' | 'snoozed' | 'skipped';
+
+export interface MedicationReminderLog {
+  id: string;
+  user_id: string;
+  medication_id: string;
+  scheduled_time: string;
+  dose_time: string;
+  status: DoseStatus;
+  action_time?: string | null;
+  snooze_until?: string | null;
+  notification_sent: boolean;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIChatMessage {
+  id: string;
+  user_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
   created_at: string;
 }
 
