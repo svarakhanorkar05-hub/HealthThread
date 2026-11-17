@@ -48,8 +48,13 @@ export function AppLayout() {
               }`
             }
           >
-            <Icon className="w-4.5 h-4.5" />
-            {item.label}
+            <Icon className="w-4.5 h-4.5 shrink-0" />
+            <span className="flex-1 truncate">{item.label}</span>
+            {item.badge && (
+              <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-teal-100 text-teal-800 shrink-0">
+                {item.badge}
+              </span>
+            )}
           </NavLink>
         );
       })}

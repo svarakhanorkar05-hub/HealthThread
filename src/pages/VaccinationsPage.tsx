@@ -7,7 +7,7 @@ import { Modal } from '@/components/Modal';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { SkeletonList } from '@/components/Skeletons';
-import { formatDate, toDateInputValue, daysUntil } from '@/lib/utils';
+import { formatDate, todayDateInputValue, toDateInputValue, daysUntil } from '@/lib/utils';
 import type { Vaccination } from '@/types/database';
 
 export function VaccinationsPage() {
@@ -48,7 +48,7 @@ export function VaccinationsPage() {
 
   const openCreateModal = () => {
     setEditingVacc(null);
-    setVaccineName(''); setDoseNumber(''); setDateAdministered(new Date().toISOString().split('T')[0]);
+    setVaccineName(''); setDoseNumber(''); setDateAdministered(todayDateInputValue());
     setProvider(''); setNextDueDate(''); setNotes('');
     setFormError(null); setModalOpen(true);
   };

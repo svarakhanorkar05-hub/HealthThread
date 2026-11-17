@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { User, Heart, Shield, Download, Trash2, Save, AlertCircle } from 'lucide-react';
+import { User, Heart, Shield, Download, Trash2, Save, AlertCircle, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useToast, ToastContainer } from '@/components/Toast';
 import { Modal } from '@/components/Modal';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { BLOOD_TYPES } from '@/lib/constants';
-import { calculateAge } from '@/lib/utils';
+import { calculateAge, todayDateInputValue } from '@/lib/utils';
 
 export function SettingsPage() {
   const { user, profile, refreshProfile } = useAuth();
@@ -106,7 +106,7 @@ export function SettingsPage() {
 
   const handleExportData = async () => {
     if (!user) return;
-    const [records, meds, vaccs, appts, documents, reminders, menLogs] = await Promise.all([
+    const [records, meds, vaccs, appts, documents, reminders, menLogs, medLogs, chatMsgs] = await Promise.all([
       supabase.from('health_records').select('*').eq('user_id', user.id),
       supabase.from('medications').select('*').eq('user_id', user.id),
       supabase.from('vaccinations').select('*').eq('user_id', user.id),
@@ -114,9 +114,19 @@ export function SettingsPage() {
       supabase.from('documents').select('*').eq('user_id', user.id),
       supabase.from('reminders').select('*').eq('user_id', user.id),
       supabase.from('menstrual_logs').select('*').eq('user_id', user.id),
+      supabase.from('medication_reminder_logs').select('*').eq('user_id', user.id),
+      supabase.from('ai_chat_messages').select('*').eq('user_id', user.id),
     ]);
 
-    const exportError = records.error || meds.error || vaccs.error || appts.error || documents.error || reminders.error || menLogs.error;
+    const exportError =
+      records.error ||
+      meds.error ||
+      vaccs.error ||
+      appts.error ||
+      documents.error ||
+      reminders.error ||
+      menLogs.error;
+
     if (exportError) {
       error(`Failed to export data: ${exportError.message}`);
       return;
@@ -131,15 +141,17 @@ export function SettingsPage() {
       appointments: appts.data || [],
       documents: documents.data || [],
       reminders: reminders.data || [],
+      medication_adherence_logs: medLogs.data || [],
+      ai_chat_history: chatMsgs.data || [],
       menstrual_logs: menLogs.data || [],
-      note: 'Document records contain file metadata only; uploaded file contents are not included.',
+      note: 'Document records contain file metadata and extracted OCR text; uploaded binary files are kept securely in private cloud storage.',
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `healththread-export-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `healththread-export-${todayDateInputValue()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     success('Data exported successfully.');
@@ -158,10 +170,10 @@ export function SettingsPage() {
       <form onSubmit={handleSave} className="card p-4 sm:p-6">
         <div className="flex items-center gap-2 mb-4">
           <User className="w-5 h-5 text-teal-700" />
-          <h2 className="section-title">Profile Information</h2>
+          <h2 className="section-title">Personal information</h2>
         </div>
 
-        {formError && <div className="mb-4"><ErrorBanner message={formError} /></div>}
+        {formError && <ErrorBanner message={formError} />}
 
         <div className="space-y-4">
           <div>
@@ -176,9 +188,9 @@ export function SettingsPage() {
               {dateOfBirth && <p className="text-xs text-slate-400 mt-1">{calculateAge(dateOfBirth)} years old</p>}
             </div>
             <div>
-              <label className="label">Biological sex</label>
-              <select value={biologicalSex || ''} onChange={(e) => setBiologicalSex(e.target.value)} className="input cursor-pointer">
-                <option value="">Not specified</option>
+              <label className="label" htmlFor="sex">Biological sex</label>
+              <select id="sex" value={biologicalSex} onChange={(e) => setBiologicalSex(e.target.value)} className="input cursor-pointer">
+                <option value="">Select...</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
                 <option value="intersex">Intersex</option>
@@ -188,10 +200,10 @@ export function SettingsPage() {
 
           <div className="grid sm:grid-cols-3 gap-4">
             <div>
-              <label className="label" htmlFor="bloodType">Blood type</label>
-              <select id="bloodType" value={bloodType} onChange={(e) => setBloodType(e.target.value)} className="input cursor-pointer">
-                <option value="">Unknown</option>
-                {BLOOD_TYPES.map((bt) => <option key={bt} value={bt}>{bt}</option>)}
+              <label className="label" htmlFor="blood">Blood type</label>
+              <select id="blood" value={bloodType} onChange={(e) => setBloodType(e.target.value)} className="input cursor-pointer">
+                <option value="">Select...</option>
+                {BLOOD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
@@ -262,7 +274,9 @@ export function SettingsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-cream-50 border border-sage-100">
             <div className="min-w-0">
               <p className="text-sm font-medium text-slate-900">Export your data</p>
-              <p className="text-xs text-slate-500">Download your profile and health data as JSON (file contents excluded)</p>
+              <p className="text-xs text-slate-500">
+                Download your profile, health timeline, documents metadata, adherence logs, and chat records as JSON
+              </p>
             </div>
             <button onClick={handleExportData} className="btn-secondary text-sm">
               <Download className="w-4 h-4" /> Export
@@ -272,7 +286,7 @@ export function SettingsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-rose-50 border border-rose-100">
             <div className="min-w-0">
               <p className="text-sm font-medium text-rose-900">Delete account</p>
-              <p className="text-xs text-rose-600">Permanently delete all your data</p>
+              <p className="text-xs text-rose-600">Permanently delete all your data and uploaded files</p>
             </div>
             <button onClick={() => setDeleteModalOpen(true)} className="btn-danger text-sm">
               <Trash2 className="w-4 h-4" /> Delete
