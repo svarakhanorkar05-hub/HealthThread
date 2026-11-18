@@ -34,6 +34,25 @@ export function normalizeHealthRecordType(value: unknown): HealthRecordType {
     : 'custom';
 }
 
+export function mapCategoryToRecordType(category?: DocumentCategory | string | null): HealthRecordType {
+  switch (category) {
+    case 'Laboratory Reports':
+      return 'lab_report';
+    case 'Prescriptions':
+      return 'prescription';
+    case 'Discharge Summaries':
+      return 'hospitalization';
+    case 'Doctor Consultation Records':
+      return 'doctor_visit';
+    case 'Vaccination Records':
+      return 'screening';
+    case 'Medical Reports':
+      return 'lab_report';
+    default:
+      return 'custom';
+  }
+}
+
 export const RECORD_TYPE_ICONS: Record<HealthRecordType, LucideIcon> = {
   doctor_visit: Stethoscope,
   hospitalization: Activity,

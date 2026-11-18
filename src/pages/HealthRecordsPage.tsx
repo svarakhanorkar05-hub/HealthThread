@@ -20,16 +20,44 @@ import { SkeletonList } from '@/components/Skeletons';
 import { DocumentScannerModal } from '@/components/DocumentScannerModal';
 import { DocumentViewerModal } from '@/components/DocumentViewerModal';
 import { formatDate, toDateInputValue } from '@/lib/utils';
+import { deleteDocument } from '@/lib/documents';
 import {
   RECORD_TYPE_LABELS,
   RECORD_TYPE_ICONS,
   RECORD_TYPE_COLORS,
   SEVERITY_COLORS,
   normalizeHealthRecordType,
+  mapCategoryToRecordType,
 } from '@/lib/constants';
 import type { HealthRecord, HealthRecordType, DocumentRecord } from '@/types/database';
 
 const RECORD_TYPES = Object.keys(RECORD_TYPE_LABELS) as HealthRecordType[];
+
+export type TimelineItem =
+  | {
+      id: string;
+      kind: 'record';
+      title: string;
+      date: string;
+      recordType: HealthRecordType;
+      description: string | null;
+      provider: string | null;
+      severity: 'mild' | 'moderate' | 'severe' | null;
+      attachedDocs: DocumentRecord[];
+      rawRecord: HealthRecord;
+    }
+  | {
+      id: string;
+      kind: 'document';
+      title: string;
+      date: string;
+      recordType: HealthRecordType;
+      description: string | null;
+      provider: string | null;
+      severity: null;
+      attachedDocs: DocumentRecord[];
+      rawDocument: DocumentRecord;
+    };
 
 export function HealthRecordsPage() {
   const { user } = useAuth();
@@ -37,6 +65,7 @@ export function HealthRecordsPage() {
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<HealthRecord[]>([]);
   const [linkedDocuments, setLinkedDocuments] = useState<Record<string, DocumentRecord[]>>({});
+  const [unlinkedDocuments, setUnlinkedDocuments] = useState<DocumentRecord[]>([]);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<HealthRecordType | 'all'>('all');
   const [modalOpen, setModalOpen] = useState(false);
@@ -77,17 +106,21 @@ export function HealthRecordsPage() {
       if (recordsRes.error) throw recordsRes.error;
       setRecords((recordsRes.data ?? []) as HealthRecord[]);
 
-      // Map linked documents by health_record_id
+      // Map linked documents by health_record_id and track unlinked standalone documents
       const docMap: Record<string, DocumentRecord[]> = {};
+      const standaloneDocs: DocumentRecord[] = [];
       if (docsRes.data) {
         (docsRes.data as DocumentRecord[]).forEach((d) => {
           if (d.health_record_id) {
             if (!docMap[d.health_record_id]) docMap[d.health_record_id] = [];
             docMap[d.health_record_id].push(d);
+          } else {
+            standaloneDocs.push(d);
           }
         });
       }
       setLinkedDocuments(docMap);
+      setUnlinkedDocuments(standaloneDocs);
     } catch (err: unknown) {
       console.error('Health records database error:', err);
       error(err instanceof Error ? err.message : 'Failed to load records');
@@ -100,13 +133,43 @@ export function HealthRecordsPage() {
     loadRecords();
   }, [loadRecords]);
 
-  const filteredRecords = records.filter((r) => {
+  // Combine records and standalone documents into a unified, chronologically sorted timeline
+  const timelineItems: TimelineItem[] = [
+    ...records.map((r) => ({
+      id: r.id,
+      kind: 'record' as const,
+      title: r.title,
+      date: r.event_date,
+      recordType: normalizeHealthRecordType(r.record_type),
+      description: r.description,
+      provider: r.provider,
+      severity: r.severity,
+      attachedDocs: linkedDocuments[r.id] || [],
+      rawRecord: r,
+    })),
+    ...unlinkedDocuments.map((d) => ({
+      id: d.id,
+      kind: 'document' as const,
+      title: d.title,
+      date: d.document_date || (d.uploaded_at ? d.uploaded_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+      recordType: mapCategoryToRecordType(d.category),
+      description: d.extracted_text?.trim()
+        ? d.extracted_text.trim().slice(0, 240) + (d.extracted_text.trim().length > 240 ? '...' : '')
+        : `Uploaded ${d.category} document`,
+      provider: null,
+      severity: null,
+      attachedDocs: [d],
+      rawDocument: d,
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const filteredItems = timelineItems.filter((item) => {
     const matchesSearch =
       !search ||
-      r.title.toLowerCase().includes(search.toLowerCase()) ||
-      (r.description?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-      (r.provider?.toLowerCase().includes(search.toLowerCase()) ?? false);
-    const matchesType = typeFilter === 'all' || normalizeHealthRecordType(r.record_type) === typeFilter;
+      item.title.toLowerCase().includes(search.toLowerCase()) ||
+      (item.description?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
+      (item.provider?.toLowerCase().includes(search.toLowerCase()) ?? false);
+    const matchesType = typeFilter === 'all' || item.recordType === typeFilter;
     return matchesSearch && matchesType;
   });
 
@@ -215,6 +278,17 @@ export function HealthRecordsPage() {
     loadRecords();
   };
 
+  const handleDeleteDocument = async (doc: DocumentRecord) => {
+    if (!window.confirm(`Are you sure you want to delete "${doc.title}"?`)) return;
+    try {
+      await deleteDocument(doc);
+      success('Document deleted successfully.');
+      loadRecords();
+    } catch (err: unknown) {
+      error(err instanceof Error ? err.message : 'Failed to delete document');
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <ToastContainer toasts={toasts} dismiss={dismiss} />
@@ -277,7 +351,7 @@ export function HealthRecordsPage() {
       {/* Records list */}
       {loading ? (
         <SkeletonList count={5} />
-      ) : filteredRecords.length === 0 ? (
+      ) : filteredItems.length === 0 ? (
         <div className="card p-8">
           <EmptyState
             icon={<FileText className="w-7 h-7" />}
@@ -302,49 +376,54 @@ export function HealthRecordsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredRecords.map((record) => {
-            const recordType = normalizeHealthRecordType(record.record_type);
-            const Icon = RECORD_TYPE_ICONS[recordType];
-            const attachedDocs = linkedDocuments[record.id] || [];
+          {filteredItems.map((item) => {
+            const recordType = item.recordType;
+            const Icon = RECORD_TYPE_ICONS[recordType] || FileText;
+            const attachedDocs = item.attachedDocs;
 
             return (
-              <div key={record.id} className="card card-hover p-4 group">
+              <div key={item.id} className="card card-hover p-4 group">
                 <div className="flex items-start gap-3">
                   <div
-                    className={`flex items-center justify-center w-10 h-10 rounded-xl border shrink-0 ${RECORD_TYPE_COLORS[recordType]}`}
+                    className={`flex items-center justify-center w-10 h-10 rounded-xl border shrink-0 ${RECORD_TYPE_COLORS[recordType] || 'bg-slate-50 text-slate-700 border-slate-100'}`}
                   >
                     <Icon className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-semibold text-slate-900 break-words">
-                        {record.title}
+                        {item.title}
                       </h3>
                       <span className={`badge border ${RECORD_TYPE_COLORS[recordType]}`}>
                         {RECORD_TYPE_LABELS[recordType]}
                       </span>
-                      {record.severity && (
-                        <span className={`badge border ${SEVERITY_COLORS[record.severity]}`}>
-                          {record.severity}
+                      {item.kind === 'document' && (
+                        <span className="badge bg-teal-50 text-teal-700 border-teal-200">
+                          Document
+                        </span>
+                      )}
+                      {item.severity && (
+                        <span className={`badge border ${SEVERITY_COLORS[item.severity]}`}>
+                          {item.severity}
                         </span>
                       )}
                     </div>
-                    {record.description && (
+                    {item.description && (
                       <p className="text-sm text-slate-600 mt-1 line-clamp-2 break-words">
-                        {record.description}
+                        {item.description}
                       </p>
                     )}
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
-                      <span>{formatDate(record.event_date)}</span>
-                      {record.provider && <span className="break-words">· {record.provider}</span>}
+                      <span>{formatDate(item.date)}</span>
+                      {item.provider && <span className="break-words">· {item.provider}</span>}
                     </div>
 
-                    {/* Attached Documents Pills */}
+                    {/* Attached Documents Pills / View Document Button */}
                     {attachedDocs.length > 0 && (
                       <div className="flex flex-wrap items-center gap-2 mt-2.5 pt-2 border-t border-slate-100">
                         <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
                           <Paperclip className="w-3 h-3 text-teal-600" />
-                          Attached ({attachedDocs.length}):
+                          {item.kind === 'document' ? 'File:' : `Attached (${attachedDocs.length}):`}
                         </span>
                         {attachedDocs.map((doc) => (
                           <button
@@ -363,34 +442,59 @@ export function HealthRecordsPage() {
                   </div>
 
                   <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      aria-label="Attach Document"
-                      title="Attach or Scan Document"
-                      onClick={() => {
-                        setScannerRecordId(record.id);
-                        setScannerOpen(true);
-                      }}
-                      className="p-2 rounded-lg text-slate-400 hover:bg-teal-50 hover:text-teal-700"
-                    >
-                      <Camera className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Edit ${record.title}`}
-                      onClick={() => openEditModal(record)}
-                      className="p-2 rounded-lg text-slate-400 hover:bg-teal-50 hover:text-teal-700"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete ${record.title}`}
-                      onClick={() => setDeleteId(record.id)}
-                      className="p-2 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {item.kind === 'record' ? (
+                      <>
+                        <button
+                          type="button"
+                          aria-label="Attach Document"
+                          title="Attach or Scan Document"
+                          onClick={() => {
+                            setScannerRecordId(item.id);
+                            setScannerOpen(true);
+                          }}
+                          className="p-2 rounded-lg text-slate-400 hover:bg-teal-50 hover:text-teal-700"
+                        >
+                          <Camera className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Edit ${item.title}`}
+                          onClick={() => openEditModal(item.rawRecord)}
+                          className="p-2 rounded-lg text-slate-400 hover:bg-teal-50 hover:text-teal-700"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${item.title}`}
+                          onClick={() => setDeleteId(item.id)}
+                          className="p-2 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          aria-label={`View ${item.title}`}
+                          title="View Document"
+                          onClick={() => setViewingDoc(item.rawDocument)}
+                          className="p-2 rounded-lg text-teal-600 hover:bg-teal-50"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${item.title}`}
+                          title="Delete Document"
+                          onClick={() => handleDeleteDocument(item.rawDocument)}
+                          className="p-2 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
