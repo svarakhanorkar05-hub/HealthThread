@@ -13,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Modal } from '@/components/Modal';
-import { DOCUMENT_CATEGORIES } from '@/lib/constants';
+import { DOCUMENT_CATEGORIES, mapCategoryToRecordType } from '@/lib/constants';
 import {
   performClientOCR,
   uploadMedicalDocument,
@@ -66,6 +66,7 @@ export function DocumentScannerModal({
   const [documentDate, setDocumentDate] = useState(new Date().toISOString().split('T')[0]);
   const [extractedText, setExtractedText] = useState('');
   const [selectedRecordId, setSelectedRecordId] = useState<string>(initialHealthRecordId || '');
+  const [createTimelineEvent, setCreateTimelineEvent] = useState(true);
   const [userRecords, setUserRecords] = useState<HealthRecord[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -107,6 +108,7 @@ export function DocumentScannerModal({
     setDocumentDate(new Date().toISOString().split('T')[0]);
     setExtractedText('');
     setSelectedRecordId(initialHealthRecordId || '');
+    setCreateTimelineEvent(true);
     setSaving(false);
   };
 
@@ -284,6 +286,33 @@ export function DocumentScannerModal({
 
       const mimeType = uploadedFile?.type || capturedBlob?.type || 'image/jpeg';
 
+      let linkedRecordId = selectedRecordId;
+
+      // Automatically create a corresponding Health Record entry on the timeline if requested
+      if (!linkedRecordId && createTimelineEvent) {
+        try {
+          const { data: newRecord, error: recErr } = await supabase
+            .from('health_records')
+            .insert({
+              user_id: userId,
+              record_type: mapCategoryToRecordType(category),
+              title: title.trim(),
+              description: extractedText.trim()
+                ? `Medical Report (${category}):\n${extractedText.trim().slice(0, 300)}`
+                : `Uploaded ${category} document: ${title.trim()}`,
+              event_date: documentDate || new Date().toISOString().split('T')[0],
+            })
+            .select()
+            .single();
+
+          if (!recErr && newRecord?.id) {
+            linkedRecordId = newRecord.id;
+          }
+        } catch (linkErr) {
+          console.warn('Failed to auto-create linked health record:', linkErr);
+        }
+      }
+
       const savedDoc = await uploadMedicalDocument({
         userId,
         file: fileToSave,
@@ -292,7 +321,7 @@ export function DocumentScannerModal({
         documentDate: documentDate || null,
         originalFileName: originalName,
         mimeType,
-        healthRecordId: selectedRecordId || null,
+        healthRecordId: linkedRecordId || null,
         extractedText: extractedText.trim() || null,
       });
 
@@ -570,8 +599,21 @@ export function DocumentScannerModal({
                     </option>
                   ))}
                 </select>
+                {!selectedRecordId && (
+                  <label className="flex items-center gap-2 mt-2 cursor-pointer text-xs font-medium text-slate-700 bg-teal-50/70 p-2.5 rounded-lg border border-teal-100">
+                    <input
+                      type="checkbox"
+                      checked={createTimelineEvent}
+                      onChange={(e) => setCreateTimelineEvent(e.target.checked)}
+                      className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    />
+                    <span>Also create an event on my Health Timeline for this document</span>
+                  </label>
+                )}
                 <p className="text-xs text-slate-400 mt-1">
-                  Linking this document allows you to view it directly from that event on your Health Timeline.
+                  {selectedRecordId
+                    ? 'This document will be attached to the selected health record.'
+                    : 'This document will be stored in your Documents vault and displayed on your Health Timeline.'}
                 </p>
               </div>
 
